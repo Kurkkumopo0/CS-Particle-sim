@@ -1,11 +1,27 @@
 using System.Collections;
+using System.Net.NetworkInformation;
+using GUI;
+using Objects;
+using SFML.Window;
 
 namespace Simulator;
 class Simulation : IEnumerable
 {
-    public Simulation()
+    public SimulationWindow SimulationWindow { get; init; }
+
+    public HashGrid Grid { get; init; }
+
+    private readonly LinkedList<Particle> _particles = new();
+
+    public int NumOfParticles
     {
-        PhysicsSolver = new PhysicsSolver();
+        get => _particles.Count;
+    }
+
+    public Simulation(SimulationWindow window)
+    {
+        SimulationWindow = window;
+        Grid = new HashGrid(window.Size);
     }
 
     public IEnumerator GetEnumerator()
@@ -19,22 +35,37 @@ class Simulation : IEnumerable
     public void AddParticle(Particle particle)
     {
         _particles.AddLast(particle);
+        Grid.NewParticle(particle);
     }
 
-    public void RemoveParticle(ref Particle particle)
+    public void RemoveParticle(Particle particle)
     {
         if (_particles.Remove(particle))
-            Console.Write("Particle removed.");
+        {
+            if (Grid.RemoveParticle(particle) != null)
+            {
+                Console.Write("Particle removed.");
+            }
+            else
+            {
+                Console.Write("Error: Client couldn't be removed");
+            }
+        }
         else
+        {
             Console.Write("Error: Particle not found");
+        }
     }
 
     // Testing method.
     public void InitParticles(int numOf)
     {
-        for (int i = 0; i < numOf; i++)
+        if (NumOfParticles < 1000)
         {
-            this.AddParticle(new Particle(10));
+            for (int i = 0; i < numOf; i++)
+            {
+                this.AddParticle(new Particle(10.0F));
+            }
         }
     }
 
@@ -43,12 +74,47 @@ class Simulation : IEnumerable
         _particles.Clear();
     }
 
-    public int NumOfParticles
+
+    // Main loop of the simulation
+    public void Exec()
     {
-        get => _particles.Count;
+        uint ii = 0;
+        while (SimulationWindow.IsOpen)
+        {
+            if (ii % 10 == 0) this.InitParticles(1);
+            const int subSteps = 8;
+            float subDt = SimulationWindow.FPSinverse / subSteps;
+
+            SimulationWindow.HandleEvent();
+            SimulationWindow.Clear();
+            for (int i = 0; i < subSteps; i++)
+            {
+                this._Update(subDt);
+            }
+            foreach (Particle p in _particles)
+            {
+                SimulationWindow.Draw(p);
+            }
+            SimulationWindow.Display();
+            ii++;
+        }
     }
 
-    public PhysicsSolver PhysicsSolver { get; init; }
+    private void _Update(float dt)
+    {
+        foreach (Particle particle in _particles)
+        {
+            ParticlePhysicsSolver.ApplyGravity(particle, 1000.0F);
+            ParticlePhysicsSolver.CollideWithBorder(particle, SimulationWindow.Size, dt);
 
-    private readonly LinkedList<Particle> _particles = new();
+            List<Particle> nearbyParticles = Grid.GetNearbyObjects(particle);
+            foreach (Particle nearParticle in nearbyParticles)
+            {
+                ParticlePhysicsSolver.HandleCollision(particle, nearParticle, dt);
+            }
+            particle.UpdatePos(dt);
+            Grid.Update(particle);
+        }
+
+    }
 }

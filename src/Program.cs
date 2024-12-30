@@ -5,8 +5,9 @@ class Program
 {
     static int Main()
     {
-        GUI.MainWindow window = new GUI.MainWindow("Hello World");
-        window.Exec();
+        GUI.SimulationWindow window = new("Hello World");
+        Simulator.Simulation sim = new(window);
+        sim.Exec();
 
         return 0;
     }

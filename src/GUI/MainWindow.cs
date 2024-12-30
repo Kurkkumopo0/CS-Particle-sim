@@ -4,57 +4,46 @@ using SFML.System;
 using Simulator;
 
 namespace GUI;
-class MainWindow : RenderWindow
+class SimulationWindow : RenderWindow
 {
-    static MainWindow()
+    static SimulationWindow()
     {
         WindowSize = new Vector2u(VideoMode.DesktopMode.Width, VideoMode.DesktopMode.Height);
     }
 
     // Constructor
-    public MainWindow(string title) : base(VideoMode.DesktopMode, title)
+    public SimulationWindow(string title) : base(VideoMode.DesktopMode, title)
     {
         this.SetFramerateLimit(60u);
-        this._simulation.InitParticles(100);
-    }
-    // Executes the simulation
-    public void Exec()
-    {
-        while (this.IsOpen)
-        {
-            this.HandleEvent();
-            this.Clear();
-
-            foreach (Particle particle in _simulation)
-            {
-                this.Draw(particle);
-            }
-
-            this.Display();
-        }
     }
 
-    // Handles MainWindow events
-    private void HandleEvent()
+    public void HandleEvent()
     {
         for (Event ev; this.PollEvent(out ev);)
         {
-            if (ev.Type == EventType.Closed)
+            switch (ev.Type)
             {
-                this.Close();
-            }
-            else if (ev.Type == EventType.KeyPressed)
-            {
-                if (ev.Key.Code == Keyboard.Key.Escape)
-                {
+                case EventType.Closed:
                     this.Close();
-                }
+                    break;
+                case EventType.KeyPressed when ev.Key.Code == Keyboard.Key.Escape:
+                    this.Close();
+                    break;
             }
         }
     }
 
-    public static Vector2u WindowSize { get; private set; }
+    public override void SetFramerateLimit(uint limit)
+    {
+        this.FPS = limit;
+        this.FPSinverse = 1.0F / limit;
+        base.SetFramerateLimit(limit);
+    }
 
-    private readonly Simulation _simulation = new();
+    public uint FPS { get; private set; }
+
+    public float FPSinverse { get; private set; }
+
+    public static Vector2u WindowSize { get; private set; }
 }
 
