@@ -5,11 +5,7 @@ using SFML.System;
 namespace Simulator;
 static class ParticlePhysicsSolver
 {
-    public static void ApplyGravity(Particle particle, float gravitation)
-    {
-        particle.Accelerate(0F, gravitation);
-    }
-
+    /*
     public static void HandleCollision(Particle particle, Particle other, float dt)
     {
         Vector2f collisionAxis = particle.Position - other.Position;
@@ -29,7 +25,7 @@ static class ParticlePhysicsSolver
 
             particle.Position -= 0.5F * normalized * delta;
             other.Position += 0.5F * normalized * delta;
-            /*
+            
             particle.SetPrevPos(particle.Position.X, particle.Position.Y);
             other.SetPrevPos(other.Position.X, other.Position.Y);
 
@@ -48,39 +44,28 @@ static class ParticlePhysicsSolver
 
             particle.Accelerate(force / m1);
             other.Accelerate(-force / m2);
-            */
+            
         }
     }
+    */
 
 
-    public static void CollideWithBorder(Particle particle, Vector2u boundary, float dt)
+    public static void CollideWithBorder(Particle particle, Vector2u boundary)
     {
         float restitution = particle.Restitution;
-        float x = particle.Position.X;
-        float y = particle.Position.Y;
+        float x = particle.Shape.Position.X;
+        float y = particle.Shape.Position.Y;
 
         // Handle collision on the X-axis
-        if (x - particle.Radius < 0 || x + particle.Radius > boundary.X)
+        if (x - particle.Shape.Radius < 0 || x + particle.Shape.Radius > boundary.X)
         {
-            float deltaVX = -restitution * particle.VelocityDt.X - particle.VelocityDt.X;
-            float aX = deltaVX / (dt * dt);
-            particle.Accelerate(aX, 0F);
-
-            float newX = x - particle.Radius < 0 ? particle.Radius : boundary.X - particle.Radius;
-            particle.SetPos(x: newX);
-            particle.SetPrevPos(x: newX);
+            particle.Velocity = new Vector2f(restitution * -particle.Velocity.X, restitution * particle.Velocity.Y);
         }
 
         // Handle collision on the Y-axis
-        if (y - particle.Radius < 0 || y + particle.Radius > boundary.Y)
+        if (y - particle.Shape.Radius < 0 || y + particle.Shape.Radius > boundary.Y)
         {
-            float deltaVY = -restitution * particle.VelocityDt.Y - particle.VelocityDt.Y;
-            float aY = deltaVY / (dt * dt);
-            particle.Accelerate(0F, aY);
-
-            float newY = y - particle.Radius < 0 ? particle.Radius : boundary.Y - particle.Radius;
-            particle.SetPos(y: newY);
-            particle.SetPrevPos(y: newY);
+            particle.Velocity = new Vector2f(restitution * particle.Velocity.X, restitution * -particle.Velocity.Y);
         }
     }
 }
