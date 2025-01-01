@@ -9,21 +9,22 @@ namespace Simulator;
 class Simulation
 {
     private float _maxRadius = 5.0F;
-    private int _subSteps = 8;
-    private float _dt = 1.0F / 60.0F;
+    private int _subSteps = 4;
+    private float _dt;
     private float _subDt;
     private Vector2f _gravity = new Vector2f(0F, 1000F);
     private RenderWindow _window;
     private List<ISimObject> _objects;
     private SpatialHash _spatialHash;
 
-    public Simulation(RenderWindow window)
+    public Simulation(RenderWindow window, uint maxFPS = 60)
     {
-        _window = window;
+        _dt = 1.0F / maxFPS;
         _subDt = _dt / _subSteps;
         _objects = new();
         _spatialHash = new(spacing: _maxRadius * 2, tableSize: 1024);
-        _window.SetFramerateLimit(60);
+        _window = window;
+        _window.SetFramerateLimit(maxFPS);
         _window.Closed += (sender, e) => window.Close();
         _window.MouseButtonPressed += (sender, e) => _HandleMouseEvent(e);
         _window.KeyReleased += (sender, e) => _HandleKeyEvent(e);

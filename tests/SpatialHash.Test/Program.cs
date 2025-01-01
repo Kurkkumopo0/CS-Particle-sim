@@ -83,7 +83,7 @@ class SpatialHash_Test
         window.Closed += (sender, e) => window.Close();
 
         // Create spatial hash
-        SpatialHash spatialHash = new SpatialHash(spacing: 50f, tableSize: 1024);
+        SpatialHash spatialHash = new SpatialHash(spacing: 50f, tableSize: 256);
 
         // Create objects at random positions
         List<ISimObject> objects = new();

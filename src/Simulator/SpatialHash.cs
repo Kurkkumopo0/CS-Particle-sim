@@ -8,14 +8,11 @@ public class SpatialHash
     private int[] _cellEntries;
     public int Count { get; set; }
     private float _maxLoadFactor = 0.75F;
-    public float LoadFactor
-    {
-        get => (float)Count / _tableSize;
-    }
 
     public SpatialHash(float spacing, int tableSize)
     {
         Spacing = spacing;
+        Count = 0;
         _tableSize = tableSize;
         _cellStart = new int[tableSize + 1];
         _cellEntries = [];
@@ -31,16 +28,39 @@ public class SpatialHash
     // Objects amount change
     private void _UpdateCount(int newCount)
     {
+        int oldCount = Count;
         Count = newCount;
-        if (newCount > Count && LoadFactor > _maxLoadFactor) _Resize();
+        if (newCount > oldCount) while (_LoadFactor() > _maxLoadFactor) _Resize();
         _cellEntries = new int[Count];
     }
+
+    private float _LoadFactor() => Count / (float)_tableSize;
 
     // Get index to hashtable
     private int _HashKey(int xi, int yi)
     {
-        int h = (xi * 92837111) ^ (yi * 689287499);
-        return Math.Abs(h) % _tableSize;
+        unchecked
+        {
+            const int seed1 = (int)0x9E3779B1;
+            const int seed2 = (int)0x85EBCA77;
+            const int seed3 = (int)0xC2B2AE3D;
+            const int seed4 = (int)0x3A9E24F1;
+            const int seed5 = (int)0xD04A57F7;
+
+
+            // Start with a base hash value
+            int h = seed1;
+
+            h ^= xi * seed2;
+            h = (h << 13) | (h >> 19);
+            h *= seed3;
+
+            h ^= yi * seed4;
+            h = (h << 15) | (h >> 17);
+            h *= seed5;
+
+            return (h & 0x7FFFFFFF) % _tableSize;
+        }
     }
 
     // Get index to hashtable
