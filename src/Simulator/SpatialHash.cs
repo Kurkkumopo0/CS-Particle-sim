@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Objects;
 using SFML.System;
 public class SpatialHash
@@ -43,23 +44,8 @@ public class SpatialHash
         {
             const int seed1 = (int)0x9E3779B1;
             const int seed2 = (int)0x85EBCA77;
-            const int seed3 = (int)0xC2B2AE3D;
-            const int seed4 = (int)0x3A9E24F1;
-            const int seed5 = (int)0xD04A57F7;
 
-
-            // Start with a base hash value
-            int h = seed1;
-
-            h ^= xi * seed2;
-            h = (h << 13) | (h >> 19);
-            h *= seed3;
-
-            h ^= yi * seed4;
-            h = (h << 15) | (h >> 17);
-            h *= seed5;
-
-            return (h & 0x7FFFFFFF) % _tableSize;
+            return (((xi * seed1) ^ (yi * seed2)) & 0x7FFFFFFF) % _tableSize;
         }
     }
 
