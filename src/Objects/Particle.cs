@@ -1,27 +1,39 @@
 using SFML.System;
 using SFML.Graphics;
-using Simulator;
-public class Particle
+
+namespace Objects;
+public class Particle : ISimObject
 {
     public float Mass { get; init; }
     public float Restitution { get; init; }
     public CircleShape Shape { get; init; }
     public Vector2f Velocity { get; set; }
-    public SpatialHash.Client Client { get; set; }
-
-    public Particle(SpatialHash.Client client, float radius, Vector2f velocity, float mass = 1.0F, float collosionDamping = 0.5F)
+    public float Radius { get => Shape.Radius; }
+    public Vector2f Position
     {
-        Client = client;
+        get => Shape.Position;
+        set => Shape.Position = value;
+    }
+
+    public Particle(Vector2f position, float radius, Vector2f velocity, float mass = 1.0F, float collosionDamping = 0.7F)
+    {
         Shape = new CircleShape(radius)
         {
             FillColor = Color.White,
             Origin = new Vector2f(radius, radius),
-            Position = client.Position
+            Position = position
         };
+
         Velocity = velocity;
         Mass = mass;
         Restitution = collosionDamping;
     }
+
+    public Vector2f Pos() => Position;
+    public void SetPos(Vector2f position) => Position = position;
+    public void SetColor(Color color) => Shape.FillColor = color;
+    public void Draw(RenderWindow window) => window.Draw(Shape);
+
 
     public void ApplyGravity(Vector2f gravity, float dt)
     {
@@ -31,8 +43,8 @@ public class Particle
     public void Update(float dt)
     {
         // Update position
-        Vector2f newPosition = Shape.Position + Velocity * dt;
-        Shape.Position = newPosition;
+        Vector2f newPosition = Pos() + Velocity * dt;
+        SetPos(newPosition);
 
     }
 }

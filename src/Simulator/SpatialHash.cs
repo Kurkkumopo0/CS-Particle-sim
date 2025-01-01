@@ -1,150 +1,127 @@
+using Objects;
 using SFML.System;
-
-namespace Simulator;
 public class SpatialHash
 {
-    private readonly List<Node>[,] _cells;
-    private readonly Vector2u _dimensions;
-    private readonly Vector2f[] _bounds;
-    private int _queryIdCounter;
-
-    public SpatialHash(Vector2f[] bounds, Vector2u dimensions)
+    public float Spacing { get; private set; }
+    private int _tableSize;
+    private int[] _cellStart;
+    private int[] _cellEntries;
+    public int Count { get; set; }
+    private float _maxLoadFactor = 0.75F;
+    public float LoadFactor
     {
-        _dimensions = dimensions;
-        _bounds = bounds;
-        _cells = new List<Node>[dimensions.X, dimensions.Y];
+        get => (float)Count / _tableSize;
+    }
 
-        for (int x = 0; x < dimensions.X; x++)
+    public SpatialHash(float spacing, int tableSize)
+    {
+        Spacing = spacing;
+        _tableSize = tableSize;
+        _cellStart = new int[tableSize + 1];
+        _cellEntries = [];
+    }
+
+    // Double the hashtable size
+    private void _Resize()
+    {
+        _tableSize *= 2;
+        _cellStart = new int[_tableSize + 1];
+    }
+
+    // Objects amount change
+    private void _UpdateCount(int newCount)
+    {
+        Count = newCount;
+        if (newCount > Count && LoadFactor > _maxLoadFactor) _Resize();
+        _cellEntries = new int[Count];
+    }
+
+    // Get index to hashtable
+    private int _HashKey(int xi, int yi)
+    {
+        int h = (xi * 92837111) ^ (yi * 689287499);
+        return Math.Abs(h) % _tableSize;
+    }
+
+    // Get index to hashtable
+    private int _HashPos(Vector2f pos)
+    {
+        return _HashKey(
+            _GridCoord(pos.X),
+            _GridCoord(pos.Y)
+        );
+    }
+
+    private int _GridCoord(float coord)
+    {
+        return (int)Math.Floor(coord / Spacing);
+    }
+
+    // Creates/updates this data structure from a given list of simulation objects
+    public void Create(List<ISimObject> objects)
+    {
+        // Update the datastructure
+        if (objects.Count != Count) _UpdateCount(objects.Count);
+        Array.Clear(_cellStart, 0, _cellStart.Length);
+        Array.Clear(_cellEntries, 0, _cellEntries.Length);
+
+        // Add positions to hashtable
+        for (int i = 0; i < Count; i++)
         {
-            for (int y = 0; y < dimensions.Y; y++)
-            {
-                _cells[x, y] = new List<Node>();
-            }
+            int h = _HashPos(objects[i].Pos());
+            _cellStart[h]++;
         }
-        _queryIdCounter = 0;
-    }
 
-    private (int, int) GetCellIndex(Vector2f position)
-    {
-        double xNormalized = Math.Clamp((position.X - _bounds[0].X) / (_bounds[1].X - _bounds[0].X), 0, 1);
-        double yNormalized = Math.Clamp((position.Y - _bounds[0].Y) / (_bounds[1].Y - _bounds[0].Y), 0, 1);
-
-        int xIndex = (int)(xNormalized * (_dimensions.X - 1));
-        int yIndex = (int)(yNormalized * (_dimensions.Y - 1));
-
-        return (xIndex, yIndex);
-    }
-
-    public Client NewClient(Vector2f position, Vector2f dimensions)
-    {
-        var client = new Client(position, dimensions);
-        Insert(client);
-        return client;
-    }
-
-    private void Insert(Client client)
-    {
-        (int minX, int minY) = GetCellIndex(0.5F * (client.Position - client.Dimensions));
-        (int maxX, int maxY) = GetCellIndex(0.5F * (client.Position + client.Dimensions));
-
-        client.MinCell = new Vector2u((uint)minX, (uint)minY);
-        client.MaxCell = new Vector2u((uint)maxX, (uint)maxY);
-
-        for (int xi = minX; xi <= maxX; xi++)
+        // Determine cell starts
+        int start = 0;
+        for (int i = 0; i < _tableSize; i++)
         {
-            for (int yi = minY; yi <= maxY; yi++)
-            {
-                var node = new Node(client);
-                _cells[xi, yi].Add(node);
-                client.Nodes.Add(node);
-            }
+            start += _cellStart[i];
+            _cellStart[i] = start;
+        }
+        _cellStart[_tableSize] = start; // Add guard
+
+        // Fill in object IDs
+        for (int i = 0; i < Count; i++)
+        {
+            int h = _HashPos(objects[i].Pos());
+            _cellStart[h]--;
+            _cellEntries[_cellStart[h]] = i;
         }
     }
 
-    public void UpdateClient(Client client)
+    // Get a list of indexes to nearby SimObjects
+    public List<int> GetNearby(Vector2f position, float searchDist)
     {
-        (int minX, int minY) = GetCellIndex(0.5F * (client.Position - client.Dimensions));
-        (int maxX, int maxY) = GetCellIndex(0.5F * (client.Position + client.Dimensions));
+        List<int> nearbyParticles = new();
 
-        if (client.MinCell.X == minX && client.MinCell.Y == minY &&
-            client.MaxCell.X == maxX && client.MaxCell.Y == maxY)
+        // Determine the bounding box
+        int xMin = _GridCoord(position.X - searchDist);
+        int yMin = _GridCoord(position.Y - searchDist);
+        int xMax = _GridCoord(position.X + searchDist);
+        int yMax = _GridCoord(position.Y + searchDist);
+
+        // Iterate over all grid cells in the bounding box
+        for (int xi = xMin; xi <= xMax; xi++)
         {
-            return;
-        }
-
-        Remove(client);
-        Insert(client);
-    }
-
-    public List<Client> FindNear(Vector2f position, Vector2f bounds)
-    {
-        (int xi, int yi) = GetCellIndex(0.5F * (position - bounds));
-        (int xend, int yend) = GetCellIndex(0.5F * (position + bounds));
-
-        List<Client> result = new List<Client>();
-        int queryId = _queryIdCounter++;
-
-        for (; xi <= xend; xi++)
-        {
-            for (; yi <= yend; yi++)
+            for (int yi = yMin; yi <= yMax; yi++)
             {
-                foreach (var node in _cells[xi, yi])
+                // Get the hash for the current cell
+                int h = _HashKey(xi, yi);
+
+                // Retrieve the start and end indices for objects in this cell
+                int start = _cellStart[h];
+                int end = _cellStart[h + 1];
+
+                // Add all objects in this cell to the nearby list
+                for (int i = start; i < end; i++)
                 {
-                    if (node.Client.QueryId != queryId)
-                    {
-                        node.Client.QueryId = queryId;
-                        result.Add(node.Client);
-                    }
+                    nearbyParticles.Add(_cellEntries[i]);
                 }
             }
         }
 
-        return result;
+        return nearbyParticles;
     }
 
-    public void Remove(Client client)
-    {
-        foreach (var node in client.Nodes)
-        {
-            _cells[node.CellX, node.CellY].Remove(node);
-        }
-        client.Nodes.Clear();
-    }
-
-    public class Client
-    {
-        public Vector2f Position { get; private set; }
-        public Vector2f Dimensions { get; private set; }
-        public Vector2u MinCell { get; set; }
-        public Vector2u MaxCell { get; set; }
-        public List<Node> Nodes { get; private set; }
-        public int QueryId { get; set; }
-
-        public Client(Vector2f position, Vector2f dimensions)
-        {
-            Position = position;
-            Dimensions = dimensions;
-            Nodes = new List<Node>();
-            QueryId = -1;
-        }
-    }
-    public class Node
-    {
-        public Client Client { get; }
-        public int CellX { get; }
-        public int CellY { get; }
-
-        public Node(Client client)
-        {
-            Client = client;
-        }
-    }
-
-    public static Vector2u GetDimension(Vector2u windowSize, float maxRadius)
-    {
-        uint dimensionX = (uint)Math.Ceiling(windowSize.X / (2 * maxRadius));
-        uint dimensionY = (uint)Math.Ceiling(windowSize.Y / (2 * maxRadius));
-        return new Vector2u(dimensionX, dimensionY);
-
-    }
 }

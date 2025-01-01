@@ -1,87 +1,137 @@
 
-using GUI;
+using System.Numerics;
+using Objects;
+using SFML.Graphics;
 using SFML.System;
+using SFML.Window;
 
 namespace Simulator;
 class Simulation
 {
     private float _maxRadius = 5.0F;
-    private SimulationWindow _window;
+    private int _subSteps = 8;
+    private float _dt = 1.0F / 60.0F;
+    private float _subDt;
+    private Vector2f _gravity = new Vector2f(0F, 1000F);
+    private RenderWindow _window;
+    private List<ISimObject> _objects;
     private SpatialHash _spatialHash;
-    private List<Particle> _particles;
-    public int NumOfParticles { get => _particles.Count; }
 
-    public Simulation(SimulationWindow window)
+    public Simulation(RenderWindow window)
     {
         _window = window;
-        Vector2f[] bounds = [new Vector2f(0, 0), (Vector2f)window.Size];
-        _spatialHash = new SpatialHash(bounds, SpatialHash.GetDimension(window.Size, _maxRadius));
-        _particles = new();
+        _subDt = _dt / _subSteps;
+        _objects = new();
+        _spatialHash = new(spacing: _maxRadius * 2, tableSize: 1024);
+        _window.SetFramerateLimit(60);
+        _window.Closed += (sender, e) => window.Close();
+        _window.MouseButtonPressed += (sender, e) => _HandleMouseEvent(e);
+        _window.KeyReleased += (sender, e) => _HandleKeyEvent(e);
     }
 
     public void AddParticle(Vector2f position, float radius, Vector2f velocity)
     {
-        SpatialHash.Client newClient = _spatialHash.NewClient(position, new Vector2f(2 * radius, 2 * radius));
-        _particles.Add(new Particle(newClient, radius, velocity));
+        Particle p = new(position, radius, velocity);
+        _objects.Add(p);
     }
 
-    public void RemoveParticle(Particle particle)
+    public void RemoveParticle(ISimObject obj)
     {
-        _spatialHash.Remove(particle.Client);
-        _particles.Remove(particle);
+        _objects.Remove(obj);
     }
 
     public void RemoveAllParticles()
     {
-        foreach (Particle particle in _particles)
-        {
-            RemoveParticle(particle);
-        }
-        _particles.Clear();
+        _objects.Clear();
     }
 
 
     // Main loop of the simulation
     public void Run()
     {
-        const int subSteps = 8;
-        float subDt = _window.FPSinverse / subSteps;
 
-        uint ii = 0;
         while (_window.IsOpen)
         {
-            if (ii % 16 == 0)
+            AddParticle(new Vector2f(_maxRadius, _maxRadius), _maxRadius, new Vector2f(0, 0));
+            _window.DispatchEvents();
+
+            for (int i = 0; i < _subSteps; i++)
             {
-                AddParticle(new Vector2f(_maxRadius, _maxRadius), _maxRadius, new Vector2f(0.1F, 0));
+                _ApplyGravity();
+                _HandleCollisions();
+                _UpdateParticles();
             }
 
-            _window.HandleEvent();
             _window.Clear();
-
-            for (int i = 0; i < subSteps; i++)
-            {
-                this._Update(subDt);
-            }
-
-            foreach (Particle p in _particles)
-            {
-                _window.Draw(p.Shape);
-            }
+            _DrawObjects();
             _window.Display();
-            ii++;
         }
     }
-
-    private void _Update(float dt)
+    private void _HandleCollisions()
     {
-        foreach (Particle particle in _particles)
+        foreach (Particle obj in _objects)
         {
-            particle.ApplyGravity(new Vector2f(0, 1000F), dt);
-            ParticlePhysicsSolver.CollideWithBorder(particle, _window.Size);
-            var nearClients = _spatialHash.FindNear(particle.Shape.Position, particle.Client.Dimensions);
-            particle.Update(dt);
-            _spatialHash.UpdateClient(particle.Client);
+            Vector2u boundary = _window.Size;
+            ParticlePhysicsSolver.CollideWithBorder(obj, boundary);
+        }
 
+        _spatialHash.Create(_objects);
+
+        foreach (Particle obj in _objects)
+        {
+            List<int> nearIndexes = _spatialHash.GetNearby(obj.Position, _maxRadius);
+            foreach (int index in nearIndexes)
+            {
+                Particle near = (Particle)_objects[index];
+                if (!ReferenceEquals(obj, near))
+                {
+                    ParticlePhysicsSolver.CheckCollision(obj, near, _subDt);
+                }
+            }
         }
     }
+
+    private void _ApplyGravity()
+    {
+        foreach (Particle obj in _objects)
+        {
+            obj.ApplyGravity(_gravity, _subDt);
+        }
+
+    }
+
+    private void _UpdateParticles()
+    {
+        foreach (Particle obj in _objects)
+        {
+            obj.Update(_subDt);
+        }
+
+    }
+
+    private void _DrawObjects()
+    {
+        foreach (var obj in _objects)
+        {
+            obj.Draw(_window);
+        }
+    }
+
+    private void _HandleMouseEvent(MouseButtonEventArgs e)
+    {
+        if (e.Button == Mouse.Button.Left)
+        {
+            Vector2f pos = new(e.X, e.Y);
+            AddParticle(pos, _maxRadius, new Vector2f(0, 0));
+        }
+    }
+
+    private void _HandleKeyEvent(KeyEventArgs e)
+    {
+        if (e.Code == Keyboard.Key.R)
+        {
+            RemoveAllParticles();
+        }
+    }
+
 }

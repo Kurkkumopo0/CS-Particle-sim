@@ -1,71 +1,92 @@
-using System.Numerics;
-using SFML.Graphics.Glsl;
+using Objects;
 using SFML.System;
 
 namespace Simulator;
 static class ParticlePhysicsSolver
 {
-    /*
-    public static void HandleCollision(Particle particle, Particle other, float dt)
+
+    public static void CheckCollision(Particle particle, Particle other, float dt)
     {
-        Vector2f collisionAxis = particle.Position - other.Position;
-        //if (collisionAxis.X == 0) collisionAxis.X = 1e-6F;
-        //if (collisionAxis.Y == 0) collisionAxis.Y = 1e-6F;
+        // Calculate the collision axis
+        Vector2f collisionAxis = particle.Pos() - other.Pos();
+
+        if (collisionAxis.X == 0 && collisionAxis.Y == 0)
+        {
+            // Generate a random collision axis
+            Random rand = new Random();
+            float randomX = (float)(rand.NextDouble() * 2 - 1);
+            float randomY = (float)(rand.NextDouble() * 2 - 1);
+            collisionAxis = new Vector2f(randomX, randomY);
+        }
 
         float distanceEnergy = MathF.Pow(collisionAxis.X, 2) + MathF.Pow(collisionAxis.Y, 2);
         float threshold = particle.Radius + other.Radius;
-        float thresholdEnergy = MathF.Pow(threshold, 2);
 
-        if (distanceEnergy < thresholdEnergy)
+        if (distanceEnergy < threshold * threshold)
         {
-            // Update position
+            // Update positions to prevent overlap
             float distance = MathF.Sqrt(distanceEnergy);
             float delta = distance - threshold;
             Vector2f normalized = collisionAxis / distance;  // Normalize the collision axis
 
+            // Move particles apart along the collision axis
             particle.Position -= 0.5F * normalized * delta;
             other.Position += 0.5F * normalized * delta;
-            
-            particle.SetPrevPos(particle.Position.X, particle.Position.Y);
-            other.SetPrevPos(other.Position.X, other.Position.Y);
 
-            // Update acceleration based on impulse
-            float restitution = Math.Min(particle.Restitution, other.Restitution);
-            Vector2f v1 = particle.VelocityDt / dt;
-            Vector2f v2 = other.VelocityDt / dt;
+            // Calculate velocities along the collision axis
+            float r = Math.Min(particle.Restitution, other.Restitution);
+
+            Vector2f v1 = particle.Velocity;
+            Vector2f v2 = other.Velocity;
 
             float m1 = particle.Mass;
             float m2 = other.Mass;
 
-            Vector2f u1 = (m1 * v1 + m2 * v2 - m2 * restitution * (v1 - v2)) / (m1 + m2);
+            // Compute relative velocity along the collision axis using dot product
+            float v1AlongAxis = v1.X * normalized.X + v1.Y * normalized.Y;
+            float v2AlongAxis = v2.X * normalized.X + v2.Y * normalized.Y;
 
-            Vector2f impulse = m1 * (u1 - v1);
-            Vector2f force = impulse / dt;
+            // Calculate the end relative velocity scalars along the collision axis
+            float impulse = (1 + r) * (v2AlongAxis - v1AlongAxis) * m1 * m2 / (m1 + m2);
+            Vector2f impulseVector = impulse * normalized;
 
-            particle.Accelerate(force / m1);
-            other.Accelerate(-force / m2);
-            
+            // Update velocities along the collision axis
+            particle.Velocity += impulseVector / m1;
+            other.Velocity -= impulseVector / m2;
         }
     }
-    */
 
 
-    public static void CollideWithBorder(Particle particle, Vector2u boundary)
+
+    public static void CollideWithBorder(Particle p, Vector2u boundary)
     {
-        float restitution = particle.Restitution;
-        float x = particle.Shape.Position.X;
-        float y = particle.Shape.Position.Y;
+        float restitution = p.Restitution;
+        float x = p.Pos().X;
+        float y = p.Pos().Y;
 
-        // Handle collision on the X-axis
-        if (x - particle.Shape.Radius < 0 || x + particle.Shape.Radius > boundary.X)
+        // Handle border collision on the X-axis
+        if (x - p.Shape.Radius < 0)
         {
-            particle.Velocity = new Vector2f(restitution * -particle.Velocity.X, restitution * particle.Velocity.Y);
+            p.Velocity = new Vector2f(restitution * -p.Velocity.X, p.Velocity.Y);
+            p.SetPos(new Vector2f(p.Shape.Radius, p.Pos().Y));
+        }
+        else if (x + p.Shape.Radius > boundary.X)
+        {
+            p.Velocity = new Vector2f(restitution * -p.Velocity.X, p.Velocity.Y);
+            p.SetPos(new Vector2f(boundary.X - p.Shape.Radius, p.Pos().Y));
         }
 
-        // Handle collision on the Y-axis
-        if (y - particle.Shape.Radius < 0 || y + particle.Shape.Radius > boundary.Y)
+        // Handle border collision on the Y-axis
+        if (y - p.Shape.Radius < 0)
         {
-            particle.Velocity = new Vector2f(restitution * particle.Velocity.X, restitution * -particle.Velocity.Y);
+            p.Velocity = new Vector2f(p.Velocity.X, restitution * -p.Velocity.Y);
+            p.SetPos(new Vector2f(p.Pos().X, p.Shape.Radius));
+
+        }
+        else if (y + p.Shape.Radius > boundary.Y)
+        {
+            p.Velocity = new Vector2f(p.Velocity.X, restitution * -p.Velocity.Y);
+            p.SetPos(new Vector2f(p.Pos().X, boundary.Y - p.Shape.Radius));
         }
     }
 }
